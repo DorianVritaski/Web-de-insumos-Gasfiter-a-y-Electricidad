@@ -21,7 +21,8 @@ export async function registrarMovimientoKardex({
   cantidad,           // número entero positivo
   responsable = null,
   ubicacionObservacion = null,
-  operadorUid
+  operadorUid,
+  operadorEmail = null  // correo del usuario que registra
 }) {
   const catalogDocId = rubro === "GASFITERIA" ? "gasfiteria_materiales" : "electricidad_materiales";
   const catalogRef = doc(db, "catalogos", catalogDocId);
@@ -72,6 +73,7 @@ export async function registrarMovimientoKardex({
       responsable: tipoMovimiento === "Salida" ? responsable : null,
       ubicacion_observacion: tipoMovimiento === "Salida" ? ubicacionObservacion : null,
       operador_uid: operadorUid,
+      operador_email: operadorEmail || null,
       timestamp: serverTimestamp()
     };
 

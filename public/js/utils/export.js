@@ -9,7 +9,7 @@ export function exportarCSV(movimientos, nombreArchivo = "kardex_insumos") {
   const columnas = [
     "ID Movimiento", "Rubro", "Fecha", "Año", "Mes",
     "Material", "Categoría / Tipo", "Tipo Movimiento",
-    "Cantidad", "Saldo Resultante", "Responsable", "Ubicación / Observación"
+    "Cantidad", "Saldo Resultante", "Responsable", "Ubicación / Observación", "Registrado por"
   ];
 
   const filas = movimientos.map(m => [
@@ -24,7 +24,8 @@ export function exportarCSV(movimientos, nombreArchivo = "kardex_insumos") {
     m.cantidad ?? "",
     m.saldo_resultante ?? "",
     m.responsable || "",
-    m.ubicacion_observacion || ""
+    m.ubicacion_observacion || "",
+    m.operador_email || ""
   ]);
 
   const contenido = [columnas, ...filas]

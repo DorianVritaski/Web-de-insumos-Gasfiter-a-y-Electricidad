@@ -97,7 +97,7 @@ export async function renderGasfiteria(container) {
           <thead>
             <tr>
               <th>ID Mov.</th><th>Fecha</th><th>Material</th><th>Categoría</th>
-              <th>Movimiento</th><th>Cant.</th><th>Saldo</th><th>Responsable</th><th>Ubicación / Obs.</th>
+              <th>Movimiento</th><th>Cant.</th><th>Saldo</th><th>Responsable</th><th>Ubicación / Obs.</th><th>Registrado por</th>
             </tr>
           </thead>
           <tbody id="gas-kardex-body">
@@ -146,12 +146,12 @@ async function cargarResponsables() {
 
 async function cargarKardex(filtros = {}) {
   const tbody = document.getElementById("gas-kardex-body");
-  tbody.innerHTML = `<tr><td colspan="9" class="text-muted text-center" style="padding:2rem"><span class="spinner"></span> Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="10" class="text-muted text-center" style="padding:2rem"><span class="spinner"></span> Cargando...</td></tr>`;
 
   try {
     const movs = await getMovimientos({ rubro: RUBRO, ...filtros });
     if (movs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="text-muted text-center" style="padding:2rem">Sin movimientos registrados.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="text-muted text-center" style="padding:2rem">Sin movimientos registrados.</td></tr>`;
       document.getElementById("gas-kardex-count").textContent = "";
       return;
     }
@@ -160,7 +160,7 @@ async function cargarKardex(filtros = {}) {
     window._gasMovimientos = movs;
   } catch (err) {
     console.error(err);
-    tbody.innerHTML = `<tr><td colspan="9" style="color:red;padding:1rem">Error al cargar: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="color:red;padding:1rem">Error al cargar: ${err.message}</td></tr>`;
   }
 }
 
@@ -182,6 +182,7 @@ function renderFila(m) {
       <td><span class="saldo-chip">${m.saldo_resultante ?? "—"}</span></td>
       <td>${m.responsable || "—"}</td>
       <td style="max-width:200px;font-size:.82rem">${m.ubicacion_observacion || "—"}</td>
+      <td style="font-size:.78rem;color:#64748b">${m.operador_email || "—"}</td>
     </tr>`;
 }
 
@@ -234,7 +235,8 @@ async function handleRegistrar() {
     cantidad: parseInt(document.getElementById("gas-cantidad").value),
     responsable: document.getElementById("gas-responsable").value || null,
     ubicacionObservacion: document.getElementById("gas-ubicacion").value.trim() || null,
-    operadorUid: usuarioActual?.uid || "desconocido"
+    operadorUid: usuarioActual?.uid || "desconocido",
+    operadorEmail: usuarioActual?.email || null
   };
 
   const errores = validarMovimiento(datos);

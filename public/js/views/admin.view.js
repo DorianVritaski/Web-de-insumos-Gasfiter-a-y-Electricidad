@@ -3,6 +3,7 @@ import { renderGasfiteria } from "./gasfiteria.view.js";
 import { renderElectricidad } from "./electricidad.view.js";
 import { getMateriales, getCategorias, getResponsables, agregarMaterial, agregarResponsable, inicializarCatalogosBase } from "../services/catalogos.service.js";
 import { getTodosMovimientos } from "../services/movimientos.service.js";
+import { crearUsuario, getUsuarios, toggleActivoUsuario, cambiarRolUsuario } from "../services/users.service.js";
 import { exportarCSV, exportarSaldosCSV } from "../utils/export.js";
 import { mostrarToast } from "../app.js";
 
@@ -22,6 +23,7 @@ export async function renderAdmin(container, usuario) {
     <div class="rubro-tabs" style="margin-bottom:1rem">
       <button class="rubro-tab" id="tab-movimientos" onclick="window._adminTab('movimientos')">📋 Movimientos</button>
       <button class="rubro-tab" id="tab-catalogo" onclick="window._adminTab('catalogo')">📦 Catálogo</button>
+      <button class="rubro-tab" id="tab-usuarios" onclick="window._adminTab('usuarios')">👥 Usuarios</button>
       <button class="rubro-tab" id="tab-reportes" onclick="window._adminTab('reportes')">📊 Reportes</button>
       <button class="rubro-tab" id="tab-setup" onclick="window._adminTab('setup')">⚙️ Configuración</button>
     </div>
@@ -31,13 +33,14 @@ export async function renderAdmin(container, usuario) {
 
   window._adminTab = async (tab) => {
     seccionActiva = tab;
-    ["movimientos", "catalogo", "reportes", "setup"].forEach(t => {
+    ["movimientos", "catalogo", "usuarios", "reportes", "setup"].forEach(t => {
       const el = document.getElementById(`tab-${t}`);
       if (el) el.className = `rubro-tab ${t === tab ? "active-gas" : ""}`;
     });
     const c = document.getElementById("admin-content");
     if (tab === "movimientos") await renderSeccionMovimientos(c);
     else if (tab === "catalogo") await renderSeccionCatalogo(c);
+    else if (tab === "usuarios") await renderSeccionUsuarios(c);
     else if (tab === "reportes") await renderSeccionReportes(c);
     else if (tab === "setup") renderSeccionSetup(c);
   };
@@ -118,14 +121,14 @@ async function renderSeccionCatalogo(container) {
             <thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Stock</th></tr></thead>
             <tbody>
               ${gasmat.length === 0
-                ? `<tr><td colspan="4" class="text-muted text-center" style="padding:1rem">Sin materiales</td></tr>`
-                : gasmat.map(m => `<tr>
+      ? `<tr><td colspan="4" class="text-muted text-center" style="padding:1rem">Sin materiales</td></tr>`
+      : gasmat.map(m => `<tr>
                     <td><code style="font-size:.78rem">${m.codigo || "—"}</code></td>
                     <td>${m.nombre}</td>
                     <td>${m.categoria || "—"}</td>
                     <td><span class="saldo-chip">${m.stock_actual ?? 0}</span></td>
                   </tr>`).join("")
-              }
+    }
             </tbody>
           </table>
         </div>
@@ -138,14 +141,14 @@ async function renderSeccionCatalogo(container) {
             <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Stock</th></tr></thead>
             <tbody>
               ${elecmat.length === 0
-                ? `<tr><td colspan="4" class="text-muted text-center" style="padding:1rem">Sin materiales</td></tr>`
-                : elecmat.map(m => `<tr>
+      ? `<tr><td colspan="4" class="text-muted text-center" style="padding:1rem">Sin materiales</td></tr>`
+      : elecmat.map(m => `<tr>
                     <td><code style="font-size:.78rem">${m.codigo || "—"}</code></td>
                     <td>${m.nombre}</td>
                     <td>${m.tipo || "—"}</td>
                     <td><span class="saldo-chip">${m.stock_actual ?? 0}</span></td>
                   </tr>`).join("")
-              }
+    }
             </tbody>
           </table>
         </div>
@@ -202,6 +205,166 @@ async function renderSeccionCatalogo(container) {
     exportarSaldosCSV(elecmat, "ELECTRICIDAD");
     mostrarToast("CSV exportado.", "success");
   });
+}
+
+/* ===== SECCIÓN: USUARIOS ===== */
+async function renderSeccionUsuarios(container) {
+  container.innerHTML = `<div class="card"><p class="text-muted text-center"><span class="spinner"></span> Cargando usuarios...</p></div>`;
+
+  let usuarios = [];
+  try {
+    usuarios = await getUsuarios();
+  } catch (e) { /* colección vacía */ }
+
+  container.innerHTML = `
+    <!-- Formulario registro nuevo usuario -->
+    <div class="card">
+      <h3 style="font-family:var(--font-heading);margin-bottom:1rem">➕ Registrar Nuevo Usuario</h3>
+      <div id="form-user-errors" class="error-box hidden"><ul></ul></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem">
+        <div class="form-group">
+          <label>Nombre completo *</label>
+          <input type="text" id="new-user-nombre" placeholder="Ej: Juan Pérez" />
+        </div>
+        <div class="form-group">
+          <label>Correo electrónico *</label>
+          <input type="email" id="new-user-email" placeholder="usuario@empresa.cl" />
+        </div>
+        <div class="form-group">
+          <label>Contraseña temporal *</label>
+          <input type="password" id="new-user-pwd" placeholder="Mínimo 6 caracteres" />
+        </div>
+        <div class="form-group">
+          <label>Rol *</label>
+          <select id="new-user-rol">
+            <option value="OPERADOR">👷 Operador</option>
+            <option value="ADMIN">🔑 Administrador</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-crear-usuario">➕ Crear Usuario</button>
+    </div>
+
+    <!-- Lista de usuarios -->
+    <div class="card">
+      <h3 style="font-family:var(--font-heading);margin-bottom:1rem">👥 Usuarios registrados (${usuarios.length})</h3>
+      <div class="table-wrapper">
+        <table class="kardex">
+          <thead>
+            <tr>
+              <th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="usuarios-tbody">
+            ${usuarios.length === 0
+      ? `<tr><td colspan="5" class="text-muted text-center" style="padding:1.5rem">Sin usuarios registrados aún.</td></tr>`
+      : usuarios.map(u => `
+                <tr id="user-row-${u.uid}">
+                  <td>${u.nombre_completo || "—"}</td>
+                  <td style="font-size:.85rem">${u.correo || "—"}</td>
+                  <td>
+                    <select class="rol-select" data-uid="${u.uid}" style="padding:.25rem .5rem;border:1px solid #e2e8f0;border-radius:.375rem;font-size:.85rem">
+                      <option value="OPERADOR" ${u.rol === "OPERADOR" ? "selected" : ""}>👷 Operador</option>
+                      <option value="ADMIN" ${u.rol === "ADMIN" ? "selected" : ""}>🔑 Admin</option>
+                    </select>
+                  </td>
+                  <td>
+                    <span style="
+                      background:${u.activo ? '#dcfce7' : '#fee2e2'};
+                      color:${u.activo ? '#15803d' : '#b91c1c'};
+                      padding:.2rem .6rem;border-radius:999px;font-size:.78rem;font-weight:600
+                    ">${u.activo ? 'Activo' : 'Inactivo'}</span>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm ${u.activo ? 'btn-danger' : 'btn-success'} toggle-activo"
+                      data-uid="${u.uid}" data-activo="${u.activo}">
+                      ${u.activo ? '🚫 Desactivar' : '✅ Activar'}
+                    </button>
+                  </td>
+                </tr>`).join("")
+    }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // ── Crear usuario ──
+  document.getElementById("btn-crear-usuario").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-crear-usuario");
+    const nombre = document.getElementById("new-user-nombre").value.trim();
+    const email = document.getElementById("new-user-email").value.trim();
+    const pwd = document.getElementById("new-user-pwd").value;
+    const rol = document.getElementById("new-user-rol").value;
+    const errEl = document.getElementById("form-user-errors");
+
+    const errores = [];
+    if (!nombre) errores.push("El nombre es obligatorio.");
+    if (!email || !email.includes("@")) errores.push("Ingresa un correo válido.");
+    if (!pwd || pwd.length < 6) errores.push("La contraseña debe tener al menos 6 caracteres.");
+
+    if (errores.length > 0) {
+      errEl.querySelector("ul").innerHTML = errores.map(e => `<li>${e}</li>`).join("");
+      errEl.classList.remove("hidden");
+      return;
+    }
+    errEl.classList.add("hidden");
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Creando...`;
+
+    try {
+      await crearUsuario({ email, password: pwd, nombre, rol });
+      mostrarToast(`✅ Usuario "${nombre}" creado correctamente.`, "success");
+      await renderSeccionUsuarios(container);
+    } catch (err) {
+      const msg = traducirErrorCreacion(err.code);
+      errEl.querySelector("ul").innerHTML = `<li>${msg}</li>`;
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.innerHTML = "➕ Crear Usuario";
+    }
+  });
+
+  // ── Toggle activo/inactivo ──
+  document.querySelectorAll(".toggle-activo").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const uid = btn.dataset.uid;
+      const activo = btn.dataset.activo === "true";
+      btn.disabled = true;
+      try {
+        await toggleActivoUsuario(uid, !activo);
+        mostrarToast(`Usuario ${!activo ? "activado" : "desactivado"}.`, "success");
+        await renderSeccionUsuarios(container);
+      } catch (err) {
+        mostrarToast(`❌ ${err.message}`, "error");
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // ── Cambiar rol ──
+  document.querySelectorAll(".rol-select").forEach(sel => {
+    sel.addEventListener("change", async function () {
+      const uid = this.dataset.uid;
+      const nuevoRol = this.value;
+      try {
+        await cambiarRolUsuario(uid, nuevoRol);
+        mostrarToast(`Rol actualizado a ${nuevoRol}.`, "success");
+      } catch (err) {
+        mostrarToast(`❌ ${err.message}`, "error");
+      }
+    });
+  });
+}
+
+function traducirErrorCreacion(code) {
+  const mapa = {
+    "auth/email-already-in-use": "Ese correo ya está registrado en el sistema.",
+    "auth/invalid-email": "El correo no es válido.",
+    "auth/weak-password": "La contraseña es demasiado débil (mínimo 6 caracteres).",
+    "auth/operation-not-allowed": "El registro de usuarios no está habilitado en Firebase."
+  };
+  return mapa[code] || "Error al crear el usuario. Verifica los datos.";
 }
 
 /* ===== SECCIÓN: REPORTES ===== */
